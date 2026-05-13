@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -96,7 +97,12 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (
+      Platform.OS !== 'web'
+      || typeof window === 'undefined'
+      || typeof window.addEventListener !== 'function'
+      || typeof window.removeEventListener !== 'function'
+    ) {
       return undefined;
     }
 
