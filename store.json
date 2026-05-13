@@ -1,5 +1,15 @@
 {
   "items": {
+    "lb-msv0": {
+      "id": "lb-msv0",
+      "title": "Add tested 2048 engine",
+      "description": "Goal: Implement the complete 2048 game mechanics as reusable, tested TypeScript logic. Context: SPEC.md and .trapper_keeper/pages/2048-game-overview.md describe the rules. The current app is an Expo TypeScript scaffold with App.tsx as a placeholder. Requirements: Add a small game engine module outside React components, for example under src/game/. Define types for board/cells/directions/game state. Implement new game setup with injectable RNG/spawn choice support, moves in all four directions, merge-once-per-tile behavior, score delta calculation, valid move detection, spawning exactly one tile after valid moves, no spawn after invalid moves, win detection when 2048 is created, and game-over detection when no moves remain. Add a test setup appropriate for the existing Expo/TypeScript project and write focused automated tests for initial setup, left/right/up/down movement, chained merge prevention, invalid moves, score updates, win detection, and game-over detection. Ensure npm test runs the mechanics tests. Acceptance: npm test passes. The engine is exported from a stable module path and is not coupled to React UI. App.tsx may remain a placeholder. Changes are committed and the task is closed. Out of scope: Do not build the visual board, gesture handling, persistence, animations, or full app UI integration.",
+      "item_type": "task",
+      "status": "open",
+      "priority": 1,
+      "created_at": "2026-05-13T16:44:48.521045735Z",
+      "updated_at": "2026-05-13T16:44:48.521045735Z"
+    },
     "lb-p961": {
       "id": "lb-p961",
       "title": "Implement 2048 game mechanics",
@@ -21,5 +31,11 @@
       "updated_at": "2026-05-13T16:22:13.247201224Z"
     }
   },
-  "deps": []
+  "deps": [
+    {
+      "from_id": "lb-msv0",
+      "to_id": "lb-p961",
+      "dep_type": "parent"
+    }
+  ]
 }
