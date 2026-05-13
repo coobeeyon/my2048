@@ -25,11 +25,10 @@
       "title": "Add move game-over regression test",
       "description": "Goal: Add a focused regression test proving move() marks gameOver true when a valid final move plus spawn leaves the board with no legal moves. Context: Review of the merged 2048 engine found no rule bugs, but noted that game-over-after-move behavior is not directly covered. The engine is in src/game/engine.ts and tests are in src/game/engine.test.ts. Requirements: Add the smallest test needed to cover move() recomputing gameOver after a valid move and spawn. Use deterministic chooseSpawn support. Do not change engine behavior unless the test exposes a real bug. Acceptance: npm test passes. The new test would fail if move() did not set state.gameOver after the final valid move. Changes are committed and task is closed. Out of scope: UI integration, broader refactors, spawn API validation, or additional game features.",
       "item_type": "task",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
-      "claimed_by": "agent-runner",
       "created_at": "2026-05-13T17:29:54.775399663Z",
-      "updated_at": "2026-05-13T17:30:22.830949060Z"
+      "updated_at": "2026-05-13T17:30:59.102938252Z"
     },
     "lb-wdfa": {
       "id": "lb-wdfa",
