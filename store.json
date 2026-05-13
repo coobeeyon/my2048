@@ -1,4 +1,15 @@
 {
-  "items": {},
+  "items": {
+    "lb-9en7": {
+      "id": "lb-9en7",
+      "title": "Add project README",
+      "description": "Create a concise README.md for this my2048 repository that states the project goal, how to open/run the current project if applicable, and what exists today. Keep the change minimal and commit it before closing the task.",
+      "item_type": "task",
+      "status": "open",
+      "priority": 1,
+      "created_at": "2026-05-13T14:51:34.153050336Z",
+      "updated_at": "2026-05-13T14:51:34.153050336Z"
+    }
+  },
   "deps": []
 }
