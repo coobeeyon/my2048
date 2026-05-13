@@ -55,11 +55,10 @@
       "title": "Animate 2048 tile movement",
       "description": "Goal: Add polished tile animation to the playable 2048 UI. Context: App.tsx currently renders the board directly from the tested src/game engine and is playable via swipes, keyboard, and buttons. The engine should remain the source of game rules. Requirements: Animate visible tile movement when a valid move changes the board, animate newly spawned tiles appearing, and provide a subtle merge/pop effect where feasible. Keep the board layout stable on phone and web. Prefer React Native Animated/LayoutAnimation or another Expo-compatible approach already available without adding heavy native dependencies. Do not rewrite the game engine or duplicate move/merge rules in React beyond minimal state needed for animation. Preserve swipe, keyboard, button controls, score/best score, reset, win, and game-over behavior. Acceptance: npm test passes. npx tsc --noEmit passes. App remains playable in Expo/web and on phone, with observable slide/appear animation for tile updates. Changes are committed and the task is closed. Out of scope: local persistence, sound, advanced physics, drag-to-follow-finger, branch cleanup, or redesigning the visual style.",
       "item_type": "task",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
-      "claimed_by": "agent-runner",
       "created_at": "2026-05-13T18:00:46.724841940Z",
-      "updated_at": "2026-05-13T18:01:16.477132453Z"
+      "updated_at": "2026-05-13T18:05:09.667746809Z"
     },
     "lb-tbxl": {
       "id": "lb-tbxl",
