@@ -7,8 +7,9 @@
       "item_type": "task",
       "status": "open",
       "priority": 1,
+      "claimed_by": "agent-runner",
       "created_at": "2026-05-13T17:43:11.476000648Z",
-      "updated_at": "2026-05-13T17:43:11.476000648Z"
+      "updated_at": "2026-05-13T17:43:37.272313819Z"
     },
     "lb-msv0": {
       "id": "lb-msv0",
