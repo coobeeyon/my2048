@@ -82,6 +82,8 @@ export default function App() {
   const nextTileId = useRef(1);
   const animationRunId = useRef(0);
   const isAnimating = useRef(false);
+  const pendingMove = useRef<Direction | null>(null);
+  const playMoveRef = useRef<(direction: Direction) => void>(() => undefined);
   const { width } = useWindowDimensions();
   const boardSize = Math.min(width - 32, 380);
   const tileSize = (boardSize - BOARD_PADDING * 2 - TILE_GAP * (BOARD_SIZE - 1)) / BOARD_SIZE;
@@ -110,6 +112,7 @@ export default function App() {
 
   const playMove = useCallback((direction: Direction) => {
     if (isAnimating.current) {
+      pendingMove.current = direction;
       return;
     }
 
@@ -147,6 +150,13 @@ export default function App() {
           Animated.parallel(animation.settleAnimations).start(() => {
             if (animationRunId.current === runId) {
               isAnimating.current = false;
+
+              const queuedDirection = pendingMove.current;
+              pendingMove.current = null;
+
+              if (queuedDirection) {
+                requestAnimationFrame(() => playMoveRef.current(queuedDirection));
+              }
             }
           });
         });
@@ -156,9 +166,14 @@ export default function App() {
     });
   }, [tileSize]);
 
+  useEffect(() => {
+    playMoveRef.current = playMove;
+  }, [playMove]);
+
   const startNewGame = useCallback(() => {
     animationRunId.current += 1;
     isAnimating.current = false;
+    pendingMove.current = null;
     renderTilesRef.current.forEach(stopTileAnimations);
 
     const nextGame = createNewGame();
