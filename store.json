@@ -1,5 +1,15 @@
 {
   "items": {
+    "lb-ads9": {
+      "id": "lb-ads9",
+      "title": "Guard keyboard listener for native React Native",
+      "description": "In App.tsx lines 98-119 the UI registers window.addEventListener/removeEventListener whenever typeof window !== 'undefined'. On native React Native/Expo, window can exist without DOM addEventListener, so the phone app can throw on mount even though the target platform is native mobile. Gate this to web/DOM support (for example Platform.OS === 'web' or typeof window.addEventListener === 'function') so native swipe play still loads.",
+      "item_type": "task",
+      "status": "open",
+      "priority": 2,
+      "created_at": "2026-05-13T17:46:48.135657081Z",
+      "updated_at": "2026-05-13T17:46:48.135657081Z"
+    },
     "lb-fax8": {
       "id": "lb-fax8",
       "title": "Build playable 2048 UI",
