@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   PanResponder,
   Platform,
   Pressable,
@@ -11,7 +13,9 @@ import {
 } from 'react-native';
 
 import {
+  type Board,
   type Direction,
+  type MoveResult,
   type TileValue,
   BOARD_SIZE,
   createNewGame,
@@ -21,6 +25,9 @@ import {
 const BOARD_PADDING = 8;
 const TILE_GAP = 8;
 const SWIPE_THRESHOLD = 32;
+const SLIDE_DURATION = 130;
+const POP_DURATION = 90;
+const SPAWN_DURATION = 110;
 
 const directions: Direction[] = ['up', 'left', 'down', 'right'];
 
@@ -52,27 +59,112 @@ const directionGlyphs: Record<Direction, string> = {
   right: '→',
 };
 
+interface AnimatedTileState {
+  id: string;
+  value: TileValue;
+  row: number;
+  col: number;
+  position: Animated.ValueXY;
+  scale: Animated.Value;
+  opacity: Animated.Value;
+  shouldPop: boolean;
+  zIndex: number;
+}
+
+interface MovingTile extends AnimatedTileState {
+  nextValue: TileValue;
+  removeAfterSlide: boolean;
+}
+
 export default function App() {
   const [game, setGame] = useState(() => createNewGame());
   const [bestScore, setBestScore] = useState(0);
+  const nextTileId = useRef(1);
+  const animationRunId = useRef(0);
+  const isAnimating = useRef(false);
   const { width } = useWindowDimensions();
   const boardSize = Math.min(width - 32, 380);
   const tileSize = (boardSize - BOARD_PADDING * 2 - TILE_GAP * (BOARD_SIZE - 1)) / BOARD_SIZE;
+  const [renderTiles, setRenderTiles] = useState(() => (
+    createTilesFromBoard(game.board, tileSize, () => nextTileId.current += 1)
+  ));
+  const renderTilesRef = useRef(renderTiles);
+
+  useEffect(() => {
+    renderTilesRef.current = renderTiles;
+  }, [renderTiles]);
 
   useEffect(() => {
     setBestScore((currentBest) => Math.max(currentBest, game.score));
   }, [game.score]);
 
+  useEffect(() => {
+    if (isAnimating.current) {
+      return;
+    }
+
+    renderTilesRef.current.forEach((tile) => {
+      tile.position.setValue(getTileOffset(tile.row, tile.col, tileSize));
+    });
+  }, [tileSize]);
+
   const playMove = useCallback((direction: Direction) => {
+    if (isAnimating.current) {
+      return;
+    }
+
     setGame((currentGame) => {
       const result = move(currentGame, direction);
-      return result.moved ? result.state : currentGame;
+
+      if (!result.moved) {
+        return currentGame;
+      }
+
+      const runId = animationRunId.current += 1;
+      const animation = buildMoveAnimation({
+        currentTiles: renderTilesRef.current,
+        direction,
+        result,
+        tileSize,
+        nextId: () => nextTileId.current += 1,
+      });
+
+      isAnimating.current = true;
+      setRenderTiles(animation.movingTiles);
+
+      Animated.parallel(animation.slideAnimations).start(() => {
+        if (animationRunId.current !== runId) {
+          return;
+        }
+
+        setRenderTiles(animation.finalTiles);
+
+        requestAnimationFrame(() => {
+          if (animationRunId.current !== runId) {
+            return;
+          }
+
+          Animated.parallel(animation.settleAnimations).start(() => {
+            if (animationRunId.current === runId) {
+              isAnimating.current = false;
+            }
+          });
+        });
+      });
+
+      return result.state;
     });
-  }, []);
+  }, [tileSize]);
 
   const startNewGame = useCallback(() => {
-    setGame(createNewGame());
-  }, []);
+    animationRunId.current += 1;
+    isAnimating.current = false;
+    renderTilesRef.current.forEach(stopTileAnimations);
+
+    const nextGame = createNewGame();
+    setGame(nextGame);
+    setRenderTiles(createTilesFromBoard(nextGame.board, tileSize, () => nextTileId.current += 1));
+  }, [tileSize]);
 
   const panResponder = useMemo(
     () => PanResponder.create({
@@ -162,15 +254,34 @@ export default function App() {
         {...panResponder.panHandlers}
         style={[styles.board, { width: boardSize, height: boardSize }]}
       >
-        {game.board.map((row, rowIndex) => row.map((cell, colIndex) => (
-          <Tile
-            key={`${rowIndex}-${colIndex}`}
+        {Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, index) => {
+          const row = Math.floor(index / BOARD_SIZE);
+          const col = index % BOARD_SIZE;
+          const offset = getTileOffset(row, col, tileSize);
+
+          return (
+            <View
+              key={`cell-${index}`}
+              style={[
+                styles.tile,
+                styles.cell,
+                {
+                  height: tileSize,
+                  left: offset.x,
+                  top: offset.y,
+                  width: tileSize,
+                },
+              ]}
+            />
+          );
+        })}
+        {renderTiles.map((tile) => (
+          <AnimatedTile
+            key={tile.id}
             size={tileSize}
-            value={cell}
-            isLastColumn={colIndex === BOARD_SIZE - 1}
-            isLastRow={rowIndex === BOARD_SIZE - 1}
+            tile={tile}
           />
-        )))}
+        ))}
       </View>
 
       <View style={styles.controls}>
@@ -201,40 +312,285 @@ function ScoreBox({ label, value }: { label: string; value: number }) {
   );
 }
 
-function Tile({
+function AnimatedTile({
   size,
-  value,
-  isLastColumn,
-  isLastRow,
+  tile,
 }: {
   size: number;
-  value: TileValue | null;
-  isLastColumn: boolean;
-  isLastRow: boolean;
+  tile: AnimatedTileState;
 }) {
-  const tileValue = value ?? 0;
-  const backgroundColor = value ? tileColors[value] ?? '#3c3a32' : '#cdc1b4';
-  const color = value && value <= 4 ? '#776e65' : '#f9f6f2';
-  const fontSize = tileValue >= 1000 ? 26 : tileValue >= 100 ? 30 : 34;
+  const backgroundColor = tileColors[tile.value] ?? '#3c3a32';
+  const color = tile.value <= 4 ? '#776e65' : '#f9f6f2';
+  const fontSize = tile.value >= 1000 ? 26 : tile.value >= 100 ? 30 : 34;
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.tile,
+        styles.animatedTile,
         {
           backgroundColor,
           height: size,
-          marginBottom: isLastRow ? 0 : TILE_GAP,
-          marginRight: isLastColumn ? 0 : TILE_GAP,
+          opacity: tile.opacity,
+          transform: [
+            ...tile.position.getTranslateTransform(),
+            { scale: tile.scale },
+          ],
           width: size,
+          zIndex: tile.zIndex,
         },
       ]}
     >
-      {value ? (
-        <Text style={[styles.tileText, { color, fontSize }]}>{value}</Text>
-      ) : null}
-    </View>
+      <Text style={[styles.tileText, { color, fontSize }]}>{tile.value}</Text>
+    </Animated.View>
   );
+}
+
+function createTilesFromBoard(
+  board: Board,
+  tileSize: number,
+  nextId: () => number,
+): AnimatedTileState[] {
+  return board.flatMap((row, rowIndex) => row.flatMap((value, colIndex) => {
+    if (!value) {
+      return [];
+    }
+
+    return [createAnimatedTile({
+      id: `tile-${nextId()}`,
+      value,
+      row: rowIndex,
+      col: colIndex,
+      tileSize,
+    })];
+  }));
+}
+
+function createAnimatedTile({
+  id,
+  value,
+  row,
+  col,
+  tileSize,
+  scale = 1,
+  opacity = 1,
+  shouldPop = false,
+}: {
+  id: string;
+  value: TileValue;
+  row: number;
+  col: number;
+  tileSize: number;
+  scale?: number;
+  opacity?: number;
+  shouldPop?: boolean;
+}): AnimatedTileState {
+  return {
+    id,
+    value,
+    row,
+    col,
+    position: new Animated.ValueXY(getTileOffset(row, col, tileSize)),
+    scale: new Animated.Value(scale),
+    opacity: new Animated.Value(opacity),
+    shouldPop,
+    zIndex: value,
+  };
+}
+
+function buildMoveAnimation({
+  currentTiles,
+  direction,
+  result,
+  tileSize,
+  nextId,
+}: {
+  currentTiles: AnimatedTileState[];
+  direction: Direction;
+  result: MoveResult;
+  tileSize: number;
+  nextId: () => number;
+}): {
+  movingTiles: AnimatedTileState[];
+  finalTiles: AnimatedTileState[];
+  slideAnimations: Animated.CompositeAnimation[];
+  settleAnimations: Animated.CompositeAnimation[];
+} {
+  const movingTiles = getMovingTiles(currentTiles, direction);
+  const settledTiles = movingTiles
+    .filter((tile) => !tile.removeAfterSlide)
+    .map((tile) => ({
+      ...tile,
+      value: tile.nextValue,
+      shouldPop: tile.shouldPop,
+      zIndex: tile.nextValue,
+    }));
+
+  const spawnedTile = result.spawnedTile
+    ? createAnimatedTile({
+      id: `tile-${nextId()}`,
+      value: result.spawnedTile.value,
+      row: result.spawnedTile.row,
+      col: result.spawnedTile.col,
+      tileSize,
+      scale: 0.25,
+      opacity: 0,
+    })
+    : null;
+  const finalTiles = spawnedTile ? [...settledTiles, spawnedTile] : settledTiles;
+
+  const slideAnimations = movingTiles.map((tile) => (
+    Animated.timing(tile.position, {
+      toValue: getTileOffset(tile.row, tile.col, tileSize),
+      duration: SLIDE_DURATION,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    })
+  ));
+
+  const settleAnimations = [
+    ...finalTiles
+      .filter((tile) => tile.shouldPop)
+      .map((tile) => Animated.sequence([
+        Animated.timing(tile.scale, {
+          toValue: 1.12,
+          duration: POP_DURATION,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(tile.scale, {
+          toValue: 1,
+          duration: POP_DURATION,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])),
+    ...(spawnedTile ? [
+      Animated.parallel([
+        Animated.timing(spawnedTile.opacity, {
+          toValue: 1,
+          duration: SPAWN_DURATION,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.spring(spawnedTile.scale, {
+          toValue: 1,
+          speed: 18,
+          bounciness: 6,
+          useNativeDriver: true,
+        }),
+      ]),
+    ] : []),
+  ];
+
+  return {
+    movingTiles,
+    finalTiles,
+    slideAnimations,
+    settleAnimations,
+  };
+}
+
+function getMovingTiles(currentTiles: AnimatedTileState[], direction: Direction): MovingTile[] {
+  const movingTiles: MovingTile[] = [];
+
+  for (let lineIndex = 0; lineIndex < BOARD_SIZE; lineIndex += 1) {
+    const lineTiles = currentTiles
+      .filter((tile) => isTileInLine(tile, direction, lineIndex))
+      .sort((left, right) => getLineOrder(left, direction) - getLineOrder(right, direction));
+
+    let targetIndex = 0;
+
+    for (let index = 0; index < lineTiles.length; index += 1) {
+      const currentTile = lineTiles[index];
+      const nextTile = lineTiles[index + 1];
+      const target = getLineTarget(direction, lineIndex, targetIndex);
+
+      if (nextTile && nextTile.value === currentTile.value) {
+        const mergedValue = currentTile.value * 2;
+        movingTiles.push(toMovingTile(currentTile, target, mergedValue, false, true));
+        movingTiles.push(toMovingTile(nextTile, target, nextTile.value, true, false));
+        index += 1;
+      } else {
+        movingTiles.push(toMovingTile(currentTile, target, currentTile.value, false, false));
+      }
+
+      targetIndex += 1;
+    }
+  }
+
+  return movingTiles;
+}
+
+function toMovingTile(
+  tile: AnimatedTileState,
+  target: { row: number; col: number },
+  nextValue: TileValue,
+  removeAfterSlide: boolean,
+  shouldPop: boolean,
+): MovingTile {
+  tile.scale.setValue(1);
+  tile.opacity.setValue(1);
+
+  return {
+    ...tile,
+    row: target.row,
+    col: target.col,
+    nextValue,
+    removeAfterSlide,
+    shouldPop,
+    zIndex: removeAfterSlide ? tile.zIndex + 1 : tile.zIndex,
+  };
+}
+
+function isTileInLine(tile: AnimatedTileState, direction: Direction, lineIndex: number): boolean {
+  return direction === 'left' || direction === 'right'
+    ? tile.row === lineIndex
+    : tile.col === lineIndex;
+}
+
+function getLineOrder(tile: AnimatedTileState, direction: Direction): number {
+  switch (direction) {
+    case 'left':
+      return tile.col;
+    case 'right':
+      return BOARD_SIZE - 1 - tile.col;
+    case 'up':
+      return tile.row;
+    case 'down':
+      return BOARD_SIZE - 1 - tile.row;
+  }
+}
+
+function getLineTarget(
+  direction: Direction,
+  lineIndex: number,
+  targetIndex: number,
+): { row: number; col: number } {
+  switch (direction) {
+    case 'left':
+      return { row: lineIndex, col: targetIndex };
+    case 'right':
+      return { row: lineIndex, col: BOARD_SIZE - 1 - targetIndex };
+    case 'up':
+      return { row: targetIndex, col: lineIndex };
+    case 'down':
+      return { row: BOARD_SIZE - 1 - targetIndex, col: lineIndex };
+  }
+}
+
+function getTileOffset(row: number, col: number, tileSize: number): { x: number; y: number } {
+  const stride = tileSize + TILE_GAP;
+  return {
+    x: BOARD_PADDING + col * stride,
+    y: BOARD_PADDING + row * stride,
+  };
+}
+
+function stopTileAnimations(tile: AnimatedTileState): void {
+  tile.position.stopAnimation();
+  tile.opacity.stopAnimation();
+  tile.scale.stopAnimation();
 }
 
 const styles = StyleSheet.create({
@@ -318,14 +674,22 @@ const styles = StyleSheet.create({
   board: {
     backgroundColor: '#bbada0',
     borderRadius: 8,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: BOARD_PADDING,
+    overflow: 'hidden',
+    position: 'relative',
   },
   tile: {
     alignItems: 'center',
     borderRadius: 6,
     justifyContent: 'center',
+  },
+  cell: {
+    backgroundColor: '#cdc1b4',
+    position: 'absolute',
+  },
+  animatedTile: {
+    left: 0,
+    position: 'absolute',
+    top: 0,
   },
   tileText: {
     fontWeight: '900',
