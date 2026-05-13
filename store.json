@@ -35,11 +35,10 @@
       "title": "Queue move input during animation",
       "description": "Goal: Improve 2048 controls so a move made during tile animation is queued instead of ignored. Context: App.tsx currently returns immediately when isAnimating.current is true in playMove, so fast swipes/key presses/buttons during animations are dropped. Requirements: Queue at least one pending Direction while animation is in flight, preferably keeping the latest queued direction. After the current slide/spawn/merge animation fully settles, automatically execute the queued move once if still valid. Reset/new game should clear any pending move. Do not allow unbounded queues or overlapping animations. Preserve existing swipe, keyboard, button controls, score/best score, reset, win/game-over behavior, and the engine as the rules source. Acceptance: npm test passes. npx tsc --noEmit passes. Expo/web export or equivalent build check passes if practical. App remains playable and responsive; quick second input during animation is applied immediately after the current animation completes. Changes are committed and task is closed. Out of scope: persistence, changing animation visuals, changing engine mechanics, or adding gesture physics.",
       "item_type": "task",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
-      "claimed_by": "agent-runner",
       "created_at": "2026-05-13T18:18:00.861045424Z",
-      "updated_at": "2026-05-13T18:18:36.253617794Z"
+      "updated_at": "2026-05-13T18:19:49.068647625Z"
     },
     "lb-msv0": {
       "id": "lb-msv0",
