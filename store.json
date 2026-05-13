@@ -1,5 +1,15 @@
 {
   "items": {
+    "lb-22hh": {
+      "id": "lb-22hh",
+      "title": "Persist 2048 game state locally",
+      "description": "The spec requires local persistence for current board, current score, best score, and win/game-over state. The changed App.tsx keeps game and bestScore only in useState (lines 55-63) and resets to createNewGame() on every app launch, so progress and best score are lost. Add device-local persistence and restore it on startup.",
+      "item_type": "task",
+      "status": "open",
+      "priority": 2,
+      "created_at": "2026-05-13T17:47:01.215888334Z",
+      "updated_at": "2026-05-13T17:47:01.215888334Z"
+    },
     "lb-ads9": {
       "id": "lb-ads9",
       "title": "Guard keyboard listener for native React Native",
