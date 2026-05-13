@@ -197,4 +197,23 @@ describe('2048 engine', () => {
     assert.equal(game.gameOver, true);
     assert.equal(hasAvailableMoves(game.board), false);
   });
+
+  it('marks game over after a valid move and spawn leave no moves', () => {
+    const result = move(state([
+      [4, 2, 4, null],
+      [4, 2, 4, 2],
+      [2, 4, 2, 4],
+      [4, 2, 4, 2],
+    ]), 'right', { chooseSpawn: spawnAtFirstEmpty() });
+
+    assert.equal(result.moved, true);
+    assert.deepEqual(result.spawnedTile, { row: 0, col: 0, value: 2 });
+    assert.deepEqual(result.state.board, [
+      [2, 4, 2, 4],
+      [4, 2, 4, 2],
+      [2, 4, 2, 4],
+      [4, 2, 4, 2],
+    ]);
+    assert.equal(result.state.gameOver, true);
+  });
 });
