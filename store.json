@@ -5,11 +5,10 @@
       "title": "Build playable 2048 UI",
       "description": "Goal: Turn the Expo placeholder into a playable 2048 app using the existing tested engine. Context: SPEC.md defines the app. The pure TypeScript engine is exported from src/game and must remain the rules source; do not reimplement move/merge logic in React. App.tsx currently renders a placeholder. Expo web dependencies are installed so web should remain runnable. Requirements: Render a 4x4 board from engine state with readable 2048-style tile colors. Show current score and best score. Add New Game/reset. Support moves on phone via swipe gestures, and support web/manual testing with keyboard arrow keys and/or visible direction buttons. After each move, update board, score, win state, and game-over state through the engine. Preserve best score during the session at minimum. Show clear win and game-over messages. Keep layout usable on a phone portrait screen and web viewport. Acceptance: App is playable from npm start in Expo/web. npm test passes. npx tsc --noEmit passes. The first screen is the playable game, not a placeholder. Changes are committed and the task is closed. Out of scope: Local persistence, animations, sound, native build setup, branch cleanup, and rewriting engine mechanics.",
       "item_type": "task",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
-      "claimed_by": "agent-runner",
       "created_at": "2026-05-13T17:43:11.476000648Z",
-      "updated_at": "2026-05-13T17:43:37.272313819Z"
+      "updated_at": "2026-05-13T17:45:12.055827624Z"
     },
     "lb-msv0": {
       "id": "lb-msv0",
