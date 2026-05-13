@@ -1,4 +1,5 @@
 /.trapper_keeper
+logs/
 
 # dependencies
 node_modules/
