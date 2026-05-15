@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
 import {
   type Board,
   type Direction,
+  type GameState,
   type MoveResult,
   type TileValue,
   BOARD_SIZE,
@@ -28,6 +30,7 @@ const SWIPE_THRESHOLD = 32;
 const SLIDE_DURATION = 130;
 const POP_DURATION = 90;
 const SPAWN_DURATION = 110;
+const STORAGE_KEY = 'my2048:game-state:v1';
 
 const directions: Direction[] = ['up', 'left', 'down', 'right'];
 
@@ -76,6 +79,11 @@ interface MovingTile extends AnimatedTileState {
   removeAfterSlide: boolean;
 }
 
+interface PersistedGame {
+  game: GameState;
+  bestScore: number;
+}
+
 export default function App() {
   const [game, setGame] = useState(() => createNewGame());
   const [bestScore, setBestScore] = useState(0);
@@ -84,6 +92,7 @@ export default function App() {
   const isAnimating = useRef(false);
   const pendingMove = useRef<Direction | null>(null);
   const playMoveRef = useRef<(direction: Direction) => void>(() => undefined);
+  const persistenceLoaded = useRef(false);
   const { width } = useWindowDimensions();
   const boardSize = Math.min(width - 32, 380);
   const tileSize = (boardSize - BOARD_PADDING * 2 - TILE_GAP * (BOARD_SIZE - 1)) / BOARD_SIZE;
@@ -97,8 +106,64 @@ export default function App() {
   }, [renderTiles]);
 
   useEffect(() => {
+    if (persistenceLoaded.current) {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function restoreSavedGame() {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        const persisted = parsePersistedGame(saved);
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (persisted) {
+          setGame(persisted.game);
+          setBestScore(Math.max(persisted.bestScore, persisted.game.score));
+          setRenderTiles(createTilesFromBoard(
+            persisted.game.board,
+            tileSize,
+            () => nextTileId.current += 1,
+          ));
+        }
+      } catch (error) {
+        console.warn('Unable to restore saved game', error);
+      } finally {
+        if (isMounted) {
+          persistenceLoaded.current = true;
+        }
+      }
+    }
+
+    restoreSavedGame();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tileSize]);
+
+  useEffect(() => {
     setBestScore((currentBest) => Math.max(currentBest, game.score));
   }, [game.score]);
+
+  useEffect(() => {
+    if (!persistenceLoaded.current) {
+      return;
+    }
+
+    const persisted: PersistedGame = {
+      game,
+      bestScore,
+    };
+
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(persisted)).catch((error) => {
+      console.warn('Unable to save game', error);
+    });
+  }, [bestScore, game]);
 
   useEffect(() => {
     if (isAnimating.current) {
@@ -606,6 +671,53 @@ function stopTileAnimations(tile: AnimatedTileState): void {
   tile.position.stopAnimation();
   tile.opacity.stopAnimation();
   tile.scale.stopAnimation();
+}
+
+function parsePersistedGame(saved: string | null): PersistedGame | null {
+  if (!saved) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(saved) as Partial<PersistedGame>;
+
+    if (!isGameState(parsed.game) || !isValidScore(parsed.bestScore)) {
+      return null;
+    }
+
+    return {
+      game: parsed.game,
+      bestScore: parsed.bestScore,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isGameState(value: unknown): value is GameState {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const state = value as Partial<GameState>;
+  return isBoard(state.board)
+    && isValidScore(state.score)
+    && typeof state.won === 'boolean'
+    && typeof state.gameOver === 'boolean';
+}
+
+function isBoard(value: unknown): value is Board {
+  return Array.isArray(value)
+    && value.length === BOARD_SIZE
+    && value.every((row) => (
+      Array.isArray(row)
+      && row.length === BOARD_SIZE
+      && row.every((cell) => cell === null || isValidScore(cell))
+    ));
+}
+
+function isValidScore(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 const styles = StyleSheet.create({
