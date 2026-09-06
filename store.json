@@ -80,6 +80,16 @@
       "created_at": "2026-05-13T17:29:54.775399663Z",
       "updated_at": "2026-05-13T17:30:59.102938252Z"
     },
+    "lb-to9c": {
+      "id": "lb-to9c",
+      "title": "Publish and merge local game persistence",
+      "description": "Goal: Move the tested persistence commit from local-only main into the remote repository through a reviewable branch. Context: local main is one commit ahead of origin/main and .claude is untracked user/tool state. Requirements: preserve untracked state; push the exact source commit on a non-main review branch; independently verify persistence, engine tests, and TypeScript; obtain Mike's merge approval; merge normally. Acceptance: origin/main contains the reviewed persistence change and checks pass. Out of scope: publishing the mobile app or adding gameplay features.",
+      "item_type": "task",
+      "status": "open",
+      "priority": 1,
+      "created_at": "2026-09-06T11:39:25.451004261Z",
+      "updated_at": "2026-09-06T11:39:25.451004261Z"
+    },
     "lb-wdfa": {
       "id": "lb-wdfa",
       "title": "Scaffold Expo hello world app",
