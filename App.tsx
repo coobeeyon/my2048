@@ -16,13 +16,13 @@ import {
 import {
   type Board,
   type Direction,
-  type GameState,
   type MoveResult,
   type TileValue,
   BOARD_SIZE,
   createNewGame,
   move,
 } from './src/game';
+import { parsePersistedGame, type PersistedGame } from './src/game/persistence';
 
 const BOARD_PADDING = 8;
 const TILE_GAP = 8;
@@ -79,11 +79,6 @@ interface MovingTile extends AnimatedTileState {
   removeAfterSlide: boolean;
 }
 
-interface PersistedGame {
-  game: GameState;
-  bestScore: number;
-}
-
 export default function App() {
   const [game, setGame] = useState(() => createNewGame());
   const [bestScore, setBestScore] = useState(0);
@@ -92,7 +87,8 @@ export default function App() {
   const isAnimating = useRef(false);
   const pendingMove = useRef<Direction | null>(null);
   const playMoveRef = useRef<(direction: Direction) => void>(() => undefined);
-  const persistenceLoaded = useRef(false);
+  const [persistence, setPersistence] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const pendingSave = useRef(Promise.resolve());
   const { width } = useWindowDimensions();
   const boardSize = Math.min(width - 32, 380);
   const tileSize = (boardSize - BOARD_PADDING * 2 - TILE_GAP * (BOARD_SIZE - 1)) / BOARD_SIZE;
@@ -106,7 +102,7 @@ export default function App() {
   }, [renderTiles]);
 
   useEffect(() => {
-    if (persistenceLoaded.current) {
+    if (persistence !== 'loading') {
       return;
     }
 
@@ -130,11 +126,11 @@ export default function App() {
             () => nextTileId.current += 1,
           ));
         }
+        setPersistence('ready');
       } catch (error) {
         console.warn('Unable to restore saved game', error);
-      } finally {
         if (isMounted) {
-          persistenceLoaded.current = true;
+          setPersistence('unavailable');
         }
       }
     }
@@ -144,26 +140,29 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [tileSize]);
+  }, [tileSize, persistence]);
 
   useEffect(() => {
     setBestScore((currentBest) => Math.max(currentBest, game.score));
   }, [game.score]);
 
   useEffect(() => {
-    if (!persistenceLoaded.current) {
+    if (persistence !== 'ready') {
       return;
     }
 
     const persisted: PersistedGame = {
       game,
-      bestScore,
+      bestScore: Math.max(bestScore, game.score),
     };
 
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(persisted)).catch((error) => {
-      console.warn('Unable to save game', error);
-    });
-  }, [bestScore, game]);
+    // Preserve move/reset order even when the storage backend is slow.
+    pendingSave.current = pendingSave.current
+      .then(() => AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(persisted)))
+      .catch((error) => {
+        console.warn('Unable to save game', error);
+      });
+  }, [bestScore, game, persistence]);
 
   useEffect(() => {
     if (isAnimating.current) {
@@ -176,6 +175,10 @@ export default function App() {
   }, [tileSize]);
 
   const playMove = useCallback((direction: Direction) => {
+    if (persistence === 'loading') {
+      return;
+    }
+
     if (isAnimating.current) {
       pendingMove.current = direction;
       return;
@@ -229,13 +232,17 @@ export default function App() {
 
       return result.state;
     });
-  }, [tileSize]);
+  }, [tileSize, persistence]);
 
   useEffect(() => {
     playMoveRef.current = playMove;
   }, [playMove]);
 
   const startNewGame = useCallback(() => {
+    if (persistence === 'loading') {
+      return;
+    }
+
     animationRunId.current += 1;
     isAnimating.current = false;
     pendingMove.current = null;
@@ -244,7 +251,7 @@ export default function App() {
     const nextGame = createNewGame();
     setGame(nextGame);
     setRenderTiles(createTilesFromBoard(nextGame.board, tileSize, () => nextTileId.current += 1));
-  }, [tileSize]);
+  }, [tileSize, persistence]);
 
   const panResponder = useMemo(
     () => PanResponder.create({
@@ -297,11 +304,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [playMove]);
 
-  const message = game.gameOver
-    ? 'Game over. Start a new game.'
-    : game.won
-      ? '2048 reached. Keep going.'
-      : null;
+  const message = persistence === 'loading'
+    ? 'Loading saved game…'
+    : persistence === 'unavailable'
+      ? 'Saved game unavailable. Playing without saving.'
+      : game.gameOver
+        ? 'Game over. Start a new game.'
+        : game.won
+          ? '2048 reached. Keep going.'
+          : null;
 
   return (
     <View style={styles.container}>
@@ -312,6 +323,7 @@ export default function App() {
         </View>
         <Pressable
           accessibilityRole="button"
+          disabled={persistence === 'loading'}
           onPress={startNewGame}
           style={({ pressed }) => [styles.newGameButton, pressed && styles.pressed]}
         >
@@ -369,6 +381,7 @@ export default function App() {
           <Pressable
             accessibilityLabel={`Move ${directionLabels[direction]}`}
             accessibilityRole="button"
+            disabled={persistence === 'loading'}
             key={direction}
             onPress={() => playMove(direction)}
             style={({ pressed }) => [styles.controlButton, pressed && styles.pressed]}
@@ -671,53 +684,6 @@ function stopTileAnimations(tile: AnimatedTileState): void {
   tile.position.stopAnimation();
   tile.opacity.stopAnimation();
   tile.scale.stopAnimation();
-}
-
-function parsePersistedGame(saved: string | null): PersistedGame | null {
-  if (!saved) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(saved) as Partial<PersistedGame>;
-
-    if (!isGameState(parsed.game) || !isValidScore(parsed.bestScore)) {
-      return null;
-    }
-
-    return {
-      game: parsed.game,
-      bestScore: parsed.bestScore,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isGameState(value: unknown): value is GameState {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const state = value as Partial<GameState>;
-  return isBoard(state.board)
-    && isValidScore(state.score)
-    && typeof state.won === 'boolean'
-    && typeof state.gameOver === 'boolean';
-}
-
-function isBoard(value: unknown): value is Board {
-  return Array.isArray(value)
-    && value.length === BOARD_SIZE
-    && value.every((row) => (
-      Array.isArray(row)
-      && row.length === BOARD_SIZE
-      && row.every((cell) => cell === null || isValidScore(cell))
-    ));
-}
-
-function isValidScore(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 const styles = StyleSheet.create({
