@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -21,6 +22,7 @@ import {
   createNewGame,
   move,
 } from './src/game';
+import { parsePersistedGame, type PersistedGame } from './src/game/persistence';
 
 const BOARD_PADDING = 8;
 const TILE_GAP = 8;
@@ -28,6 +30,7 @@ const SWIPE_THRESHOLD = 32;
 const SLIDE_DURATION = 130;
 const POP_DURATION = 90;
 const SPAWN_DURATION = 110;
+const STORAGE_KEY = 'my2048:game-state:v1';
 
 const directions: Direction[] = ['up', 'left', 'down', 'right'];
 
@@ -84,6 +87,8 @@ export default function App() {
   const isAnimating = useRef(false);
   const pendingMove = useRef<Direction | null>(null);
   const playMoveRef = useRef<(direction: Direction) => void>(() => undefined);
+  const [persistence, setPersistence] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const pendingSave = useRef(Promise.resolve());
   const { width } = useWindowDimensions();
   const boardSize = Math.min(width - 32, 380);
   const tileSize = (boardSize - BOARD_PADDING * 2 - TILE_GAP * (BOARD_SIZE - 1)) / BOARD_SIZE;
@@ -97,8 +102,67 @@ export default function App() {
   }, [renderTiles]);
 
   useEffect(() => {
+    if (persistence !== 'loading') {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function restoreSavedGame() {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        const persisted = parsePersistedGame(saved);
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (persisted) {
+          setGame(persisted.game);
+          setBestScore(Math.max(persisted.bestScore, persisted.game.score));
+          setRenderTiles(createTilesFromBoard(
+            persisted.game.board,
+            tileSize,
+            () => nextTileId.current += 1,
+          ));
+        }
+        setPersistence('ready');
+      } catch (error) {
+        console.warn('Unable to restore saved game', error);
+        if (isMounted) {
+          setPersistence('unavailable');
+        }
+      }
+    }
+
+    restoreSavedGame();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tileSize, persistence]);
+
+  useEffect(() => {
     setBestScore((currentBest) => Math.max(currentBest, game.score));
   }, [game.score]);
+
+  useEffect(() => {
+    if (persistence !== 'ready') {
+      return;
+    }
+
+    const persisted: PersistedGame = {
+      game,
+      bestScore: Math.max(bestScore, game.score),
+    };
+
+    // Preserve move/reset order even when the storage backend is slow.
+    pendingSave.current = pendingSave.current
+      .then(() => AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(persisted)))
+      .catch((error) => {
+        console.warn('Unable to save game', error);
+      });
+  }, [bestScore, game, persistence]);
 
   useEffect(() => {
     if (isAnimating.current) {
@@ -111,6 +175,10 @@ export default function App() {
   }, [tileSize]);
 
   const playMove = useCallback((direction: Direction) => {
+    if (persistence === 'loading') {
+      return;
+    }
+
     if (isAnimating.current) {
       pendingMove.current = direction;
       return;
@@ -164,13 +232,17 @@ export default function App() {
 
       return result.state;
     });
-  }, [tileSize]);
+  }, [tileSize, persistence]);
 
   useEffect(() => {
     playMoveRef.current = playMove;
   }, [playMove]);
 
   const startNewGame = useCallback(() => {
+    if (persistence === 'loading') {
+      return;
+    }
+
     animationRunId.current += 1;
     isAnimating.current = false;
     pendingMove.current = null;
@@ -179,7 +251,7 @@ export default function App() {
     const nextGame = createNewGame();
     setGame(nextGame);
     setRenderTiles(createTilesFromBoard(nextGame.board, tileSize, () => nextTileId.current += 1));
-  }, [tileSize]);
+  }, [tileSize, persistence]);
 
   const panResponder = useMemo(
     () => PanResponder.create({
@@ -232,11 +304,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [playMove]);
 
-  const message = game.gameOver
-    ? 'Game over. Start a new game.'
-    : game.won
-      ? '2048 reached. Keep going.'
-      : null;
+  const message = persistence === 'loading'
+    ? 'Loading saved game…'
+    : persistence === 'unavailable'
+      ? 'Saved game unavailable. Playing without saving.'
+      : game.gameOver
+        ? 'Game over. Start a new game.'
+        : game.won
+          ? '2048 reached. Keep going.'
+          : null;
 
   return (
     <View style={styles.container}>
@@ -247,6 +323,7 @@ export default function App() {
         </View>
         <Pressable
           accessibilityRole="button"
+          disabled={persistence === 'loading'}
           onPress={startNewGame}
           style={({ pressed }) => [styles.newGameButton, pressed && styles.pressed]}
         >
@@ -304,6 +381,7 @@ export default function App() {
           <Pressable
             accessibilityLabel={`Move ${directionLabels[direction]}`}
             accessibilityRole="button"
+            disabled={persistence === 'loading'}
             key={direction}
             onPress={() => playMove(direction)}
             style={({ pressed }) => [styles.controlButton, pressed && styles.pressed]}
